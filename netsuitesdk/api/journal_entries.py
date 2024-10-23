@@ -42,7 +42,7 @@ class JournalEntries(ApiBase):
                                            pageSize=20)
         return self._paginated_search_to_generator(paginated_search=paginated_search)
 
-    def post(self, data) -> OrderedDict:
+    def post(self, data, custom_body_fields=None) -> OrderedDict:
         assert data['externalId'], 'missing external id'
         je = self.class_(externalId=data['externalId'])
         line_list = []
@@ -75,6 +75,31 @@ class JournalEntries(ApiBase):
         je['lineList'] = self.line_list_class_(line=line_list)
         self.build_simple_fields(self.SIMPLE_FIELDS, data, je)
         self.build_record_ref_fields(self.RECORD_REF_FIELDS, data, je)
+
+        # Adding custom body fields if provided
+        if custom_body_fields:
+            custom_field_list = []
+            for field in custom_body_fields:
+                if field['type'] == 'String':
+                    custom_field_list.append(
+                        self.ns_client.StringCustomFieldRef(
+                            scriptId=field.get('scriptId'),
+                            internalId=field.get('internalId'),
+                            value=field['value']
+                        )
+                    )
+                elif field['type'] == 'Select':
+                    custom_field_list.append(
+                        self.ns_client.SelectCustomFieldRef(
+                            scriptId=field.get('scriptId'),
+                            internalId=field.get('internalId'),
+                            value=self.ns_client.ListOrRecordRef(
+                                internalId=field['value']
+                            )
+                        )
+                    )
+            if custom_field_list:
+                je.customFieldList = self.ns_client.CustomFieldList(custom_field_list)
 
         logger.debug('able to create je = %s', je)
         res = self.ns_client.upsert(je, 'journal_entry')
